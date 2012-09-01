@@ -22,7 +22,7 @@ something like this:
 
 On Debian and Ubuntu, you need to update the initramfs after changing `crypttab`:
 
-	update-initramfs -u
+	sudo update-initramfs -u
 
 
 Usage
