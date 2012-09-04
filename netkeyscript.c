@@ -54,6 +54,14 @@ int ifup(void) {
     return 1;
 }
 
+int read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
+    msg_size = recv(socket, msg, sizeof(msg), 0);
+    if (msg_size < 0) {
+	perror("recv");
+    }
+    return msg_size;
+}
+
 int main(int argc, char **argv) {
     int fd;
     uint8_t msg[2048];
@@ -91,9 +99,8 @@ int main(int argc, char **argv) {
 	return 1;
     }
 
-    msg_size = recv(fd, msg, sizeof(msg), 0);
+    msg_size = read_passphrase(fd, msg, sizeof(msg));
     if (msg_size < 0) {
-	perror("recv");
 	return 1;
     }
     if (fwrite(msg, sizeof(msg_size), 1, stdout) < 1) {
