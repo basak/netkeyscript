@@ -24,9 +24,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
 #include <net/if.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 int ifup(void) {
     int fd;
@@ -55,11 +57,28 @@ int ifup(void) {
 }
 
 int read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
-    msg_size = recv(socket, msg, sizeof(msg), 0);
-    if (msg_size < 0) {
-	perror("recv");
+    fd_set fds;
+    struct timeval timeout;
+    int result;
+
+    for (;;) {
+	fputs("\a", stderr);
+	FD_ZERO(&fds);
+	FD_SET(socket, &fds);
+	timeout.tv_sec = 10;
+	timeout.tv_usec = 0;
+	result = select(socket+1, &fds, NULL, NULL, &timeout);
+	if (result < 0 && errno != EINTR) {
+	    perror("select");
+	    return -1;
+	} else if (result > 0) {
+	    msg_size = recv(socket, msg, sizeof(msg), 0);
+	    if (msg_size < 0) {
+		perror("recv");
+	    }
+	    return msg_size;
+	}
     }
-    return msg_size;
 }
 
 int main(int argc, char **argv) {
