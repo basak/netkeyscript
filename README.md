@@ -43,6 +43,10 @@ Security Considerations
   to pick it up. You should decide whether this is safe in your situation.
   You could use a temporary crossover cable directly as an alternative.
 
+* If Mallory pretends to be your server (for example: by physically replacing
+  it, or by intercepting network communication), he can fool you into handing
+  over your passphrase.
+
 Future Directions
 -----------------
 
