@@ -99,6 +99,7 @@ int main(int argc, char **argv) {
 	return 1;
     }
 
+    fputs("netkeyscript: waiting for passphrase\n", stderr);
     msg_size = read_passphrase(fd, msg, sizeof(msg));
     if (msg_size < 0) {
 	return 1;
