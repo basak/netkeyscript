@@ -22,6 +22,8 @@
 
 #define NETKEYSCRIPT_PORT 30621
 #define NETKEYSCRIPT_PROTO_PASSPHRASE 0
+#define NETKEYSCRIPT_PROTO_REQUEST 1
+#define NETKEYSCRIPT_PROTO_RECEIVED 2
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -59,6 +61,26 @@ int ifup(void) {
     return 1;
 }
 
+int send_command(int fd, uint8_t command) {
+    struct sockaddr_in6 addr;
+    ssize_t result;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin6_family = AF_INET6;
+    if (!inet_pton(AF_INET6, "ff02::1", &addr.sin6_addr)) {
+	perror("inet_pton");
+	return 0;
+    }
+    addr.sin6_port = htons(NETKEYSCRIPT_PORT);
+    result = sendto(fd, &command, sizeof(command), 0,
+		    (struct sockaddr *)&addr, sizeof(addr));
+    if (result < 0) {
+	perror("sendto");
+	return 0;
+    }
+    return 1;
+}
+
 ssize_t read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
     fd_set fds;
     struct timeval timeout;
@@ -66,6 +88,8 @@ ssize_t read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
 
     for (;;) {
 	fputs("\a", stderr);
+	if (!send_command(socket, NETKEYSCRIPT_PROTO_REQUEST))
+	    return -1;
 	FD_ZERO(&fds);
 	FD_SET(socket, &fds);
 	timeout.tv_sec = 10;
@@ -80,8 +104,10 @@ ssize_t read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
 		perror("recv");
 		return -1;
 	    }
-	    if (msg_size > 0 && msg[0] == NETKEYSCRIPT_PROTO_PASSPHRASE)
+	    if (msg_size > 0 && msg[0] == NETKEYSCRIPT_PROTO_PASSPHRASE) {
+		send_command(socket, NETKEYSCRIPT_PROTO_RECEIVED);
 		return result;
+	    }
 	}
     }
 }
@@ -92,6 +118,7 @@ int main(int argc, char **argv) {
     ssize_t msg_size;
     struct ipv6_mreq mreq;
     struct sockaddr_in6 addr;
+    const int zero = 0;
 
     if (!ifup())
 	return 1;
@@ -119,6 +146,11 @@ int main(int argc, char **argv) {
     }
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &mreq,
 		   sizeof(mreq)) < 0) {
+	perror("setsockopt");
+	return 1;
+    }
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &zero,
+		   sizeof(zero))) {
 	perror("setsockopt");
 	return 1;
     }
