@@ -58,10 +58,10 @@ int ifup(void) {
     return 1;
 }
 
-int read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
+ssize_t read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
     fd_set fds;
     struct timeval timeout;
-    int result;
+    ssize_t result;
 
     for (;;) {
 	fputs("\a", stderr);
