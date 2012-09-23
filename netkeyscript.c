@@ -21,6 +21,7 @@
 */
 
 #define NETKEYSCRIPT_PORT 30621
+#define NETKEYSCRIPT_PROTO_PASSPHRASE 0
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -79,7 +80,8 @@ ssize_t read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
 		perror("recv");
 		return -1;
 	    }
-	    return result;
+	    if (msg_size > 0 && msg[0] == NETKEYSCRIPT_PROTO_PASSPHRASE)
+		return result;
 	}
     }
 }
@@ -126,7 +128,8 @@ int main(int argc, char **argv) {
     if (msg_size < 0) {
 	return 1;
     }
-    if (fwrite(msg, msg_size, 1, stdout) < 1) {
+    /* +1/-1 to skip the command prefix code */
+    if (fwrite(msg+1, msg_size-1, 1, stdout) < 1) {
 	fputs("fwrite: error\n", stderr);
 	return 1;
     }

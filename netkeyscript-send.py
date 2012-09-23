@@ -20,7 +20,10 @@
 # ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
+NETKEYSCRIPT_PROTO_PASSPHRASE = 0
+
 import argparse
+import struct
 import sys
 
 from scapy.all import (
@@ -46,7 +49,8 @@ def main():
     parser.add_argument('--dest', default='ff02::1')
     args = parser.parse_args()
 
-    payload = sys.stdin.read()
+    payload_command = struct.pack('b', NETKEYSCRIPT_PROTO_PASSPHRASE)
+    payload = payload_command + sys.stdin.read()
     send(dst=args.dest, sport=args.sport, dport=args.dport,
          payload=payload, iface=args.iface)
 
