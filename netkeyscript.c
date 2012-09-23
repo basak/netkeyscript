@@ -20,6 +20,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
 */
 
+#define NETKEYSCRIPT_PORT 30621
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -100,7 +102,7 @@ int main(int argc, char **argv) {
     memset(&addr, 0, sizeof(addr));
     addr.sin6_family = AF_INET6;
     addr.sin6_addr = in6addr_any;
-    addr.sin6_port = htons(30621);
+    addr.sin6_port = htons(NETKEYSCRIPT_PORT);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 	perror("bind");
