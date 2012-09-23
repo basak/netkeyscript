@@ -74,11 +74,12 @@ ssize_t read_passphrase(int socket, uint8_t *msg, ssize_t msg_size) {
 	    perror("select");
 	    return -1;
 	} else if (result > 0) {
-	    msg_size = recv(socket, msg, sizeof(msg), 0);
-	    if (msg_size < 0) {
+	    result = recv(socket, msg, msg_size, 0);
+	    if (result < 0) {
 		perror("recv");
+		return -1;
 	    }
-	    return msg_size;
+	    return result;
 	}
     }
 }
@@ -125,7 +126,7 @@ int main(int argc, char **argv) {
     if (msg_size < 0) {
 	return 1;
     }
-    if (fwrite(msg, sizeof(msg_size), 1, stdout) < 1) {
+    if (fwrite(msg, msg_size, 1, stdout) < 1) {
 	fputs("fwrite: error\n", stderr);
 	return 1;
     }
