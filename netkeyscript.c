@@ -49,15 +49,18 @@ int ifup(void) {
     strcpy(req.ifr_name, "eth0");
     if (ioctl(fd, SIOCGIFFLAGS, &req) < 0) {
 	perror("ioctl");
+	close(fd);
 	return 0;
     }
     if (!(req.ifr_flags & IFF_UP)) {
 	req.ifr_flags |= IFF_UP;
 	if (ioctl(fd, SIOCSIFFLAGS, &req) < 0) {
 	    perror("ioctl");
+	    close(fd);
 	    return 0;
 	}
     }
+    close(fd);
     return 1;
 }
 
