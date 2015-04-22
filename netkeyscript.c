@@ -25,42 +25,160 @@
 #define NETKEYSCRIPT_PROTO_REQUEST 1
 #define NETKEYSCRIPT_PROTO_RECEIVED 2
 
-#include <sys/socket.h>
-#include <netinet/in.h>
+#define _GNU_SOURCE 1
 #include <arpa/inet.h>
+#include <errno.h>
+#include <linux/if_link.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
-#include <net/if.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#define SEEN_RUNNING 1
+#define SEEN_ADDRESS 2
+#define SEEN_READY (SEEN_RUNNING | SEEN_ADDRESS)
+
+int ifup_start_listening(int fd) {
+    struct sockaddr_nl sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.nl_family = AF_NETLINK;
+    sa.nl_groups = RTMGRP_LINK | RTMGRP_IPV6_IFADDR;
+    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa))) {
+	perror("bind");
+	return 0;
+    }
+    return 1;
+}
+
+void ifup_scan_event(struct nlmsghdr *nh, int len, int *seen_flags) {
+    struct ifinfomsg *ifi;
+
+    for (;NLMSG_OK(nh, len); nh = NLMSG_NEXT(nh, len)) {
+	switch (nh->nlmsg_type) {
+	    case NLMSG_DONE:
+		return;
+
+	    case NLMSG_ERROR:
+		return;
+
+	    case RTM_NEWLINK:
+		ifi = NLMSG_DATA(nh);
+		if (ifi->ifi_flags & IFF_RUNNING) {
+		    *seen_flags |= SEEN_RUNNING;
+		}
+		break;
+
+	    case RTM_NEWADDR:
+		*seen_flags |= SEEN_ADDRESS;
+		break;
+	}
+    }
+}
+
+int ifup_read_event(int fd, int *seen_flags) {
+    struct pollfd fds;
+    int len;
+    char buf[4096];
+    struct iovec iov;
+    struct msghdr msg;
+
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+
+    fds.fd = fd;
+    fds.events = POLLIN;
+
+    if (TEMP_FAILURE_RETRY(poll(&fds, 1, -1)) < 0) {
+	perror("poll");
+	return 0;
+    }
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    len = recvmsg(fd, &msg, 0);
+    if (len < 0) {
+	perror("recvmsg");
+	return 0;
+    }
+
+    if (seen_flags)
+	ifup_scan_event((struct nlmsghdr *)buf, len, seen_flags);
+
+    return 1;
+}
 
 int ifup(void) {
-    int fd;
+    int inet6_fd;
+    int netlink_fd;
     struct ifreq req;
+    int seen_flags = 0;
 
-    fd = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (fd < 0) {
+    inet6_fd = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (inet6_fd < 0) {
 	perror("socket");
+	return 0;
+    }
+    netlink_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (netlink_fd < 0) {
+	perror("socket");
+	close(inet6_fd);
+	return 0;
+    }
+    if (!ifup_start_listening(netlink_fd)) {
+	close(netlink_fd);
+	close(inet6_fd);
 	return 0;
     }
 
     memset(&req, 0, sizeof(req));
     strcpy(req.ifr_name, "eth0");
-    if (ioctl(fd, SIOCGIFFLAGS, &req) < 0) {
+    if (ioctl(inet6_fd, SIOCGIFFLAGS, &req) < 0) {
 	perror("ioctl");
-	close(fd);
+	close(netlink_fd);
+	close(inet6_fd);
 	return 0;
     }
     if (!(req.ifr_flags & IFF_UP)) {
 	req.ifr_flags |= IFF_UP;
-	if (ioctl(fd, SIOCSIFFLAGS, &req) < 0) {
+	if (ioctl(inet6_fd, SIOCSIFFLAGS, &req) < 0) {
 	    perror("ioctl");
-	    close(fd);
+	    close(netlink_fd);
+	    close(inet6_fd);
 	    return 0;
 	}
     }
-    close(fd);
+
+    if (!(req.ifr_flags & IFF_RUNNING)) {
+	fputs("netkeyscript: waiting for eth0 to be running with an address "
+		"assigned\n", stderr);
+	while ((seen_flags & SEEN_READY) != SEEN_READY) {
+	    if (!ifup_read_event(netlink_fd, &seen_flags)) {
+		close(netlink_fd);
+		close(inet6_fd);
+		return 0;
+	    }
+	}
+	if (ioctl(inet6_fd, SIOCGIFFLAGS, &req) < 0) {
+	    perror("ioctl");
+	    close(netlink_fd);
+	    close(inet6_fd);
+	    return 0;
+	}
+	if (!(req.ifr_flags & IFF_RUNNING)) {
+	    fputs("netkeyscript: eth0 still not running but continuing "
+		    "anyway\n", stderr);
+	}
+    }
+    close(netlink_fd);
+    close(inet6_fd);
     return 1;
 }
 
