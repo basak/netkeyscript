@@ -182,6 +182,34 @@ int ifup(void) {
     return 1;
 }
 
+int ifdown(void) {
+    int inet6_fd;
+    struct ifreq req;
+
+    inet6_fd = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (inet6_fd < 0) {
+	perror("socket");
+	return 0;
+    }
+
+    memset(&req, 0, sizeof(req));
+    strcpy(req.ifr_name, "eth0");
+    if (ioctl(inet6_fd, SIOCGIFFLAGS, &req) < 0) {
+	perror("ioctl");
+	close(inet6_fd);
+	return 0;
+    }
+    if (req.ifr_flags & IFF_UP) {
+	req.ifr_flags &= ~IFF_UP;
+	if (ioctl(inet6_fd, SIOCSIFFLAGS, &req) < 0) {
+	    perror("ioctl");
+	    close(inet6_fd);
+	    return 0;
+	}
+    }
+    return 1;
+}
+
 int send_command(int fd, uint8_t command) {
     struct sockaddr_in6 addr;
     ssize_t result;
@@ -286,5 +314,6 @@ int main(int argc, char **argv) {
 	fputs("fwrite: error\n", stderr);
 	return 1;
     }
+    ifdown();
     return 0;
 }
